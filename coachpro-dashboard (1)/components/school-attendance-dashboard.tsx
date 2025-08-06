@@ -126,12 +126,14 @@ export function SchoolAttendanceDashboard() {
   }, [])
 
   const handleMarkAttendance = () => {
+    // const response = await fetch('http://localhost:5000/api/session-data') // Your other local server
+    // const sessionData = await response.json()
     // Generate unique QR code data for this class session
     const sessionData = {
       class: "Mathematics 10A",
       teacher: "Ms. Johnson",
       date: new Date().toISOString(),
-      sessionId: Math.random().toString(36).substr(2, 9),
+      sessionId: "FCM.41.008.062.23\n",
       action: "mark_attendance"
     }
     setQrCodeData(JSON.stringify(sessionData))

@@ -5,67 +5,55 @@ import { ChevronLeft, ChevronRight, Plus, Clock, Users, MapPin } from 'lucide-re
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 
-const calendarEvents = [
-  {
-    id: 1,
-    title: "Mathematics 10A",
-    time: "10:30 AM - 11:15 AM",
-    room: "Room 204",
-    students: 28,
-    type: "class",
-    status: "scheduled",
-    date: "2024-11-11"
-  },
-  {
-    id: 2,
-    title: "Chemistry 10B",
-    time: "1:00 PM - 1:45 PM",
-    room: "Room 205",
-    students: 30,
-    type: "class",
-    status: "scheduled",
-    date: "2024-11-11"
-  },
-  {
-    id: 3,
-    title: "Physics 11B",
-    time: "2:00 PM - 2:45 PM",
-    room: "Room 301",
-    students: 25,
-    type: "class",
-    status: "scheduled",
-    date: "2024-11-11"
-  },
-  {
-    id: 4,
-    title: "Parent-Teacher Conference",
-    time: "4:00 PM - 6:00 PM",
-    room: "Conference Room",
-    students: null,
-    type: "meeting",
-    status: "scheduled",
-    date: "2024-11-12"
-  },
-  {
-    id: 5,
-    title: "Mathematics 9A",
-    time: "9:00 AM - 9:45 AM",
-    room: "Room 203",
-    students: 32,
-    type: "class",
-    status: "completed",
-    date: "2024-11-08"
-  }
-]
+
+// API endpoint to send the calendarEvents list as JSON
+// The endpoint is the GET handler for this file, so its route is `/api/calendar-page` 
+// (or whatever route this file is mapped to in your Next.js app).
 
 const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const currentDate = new Date(2024, 10, 11) // November 11, 2024
+interface CalendarEvent {
+  id: string;
+  title: string;
+  date: string;
+  time: string;
+  room: string;
+  students?: number;
+  type: string;
+  status: string;
+}
 
-export function CalendarPage() {
+export  function CalendarPage() {
   const [selectedDate, setSelectedDate] = React.useState(currentDate)
   const [viewMode, setViewMode] = React.useState<'month' | 'week' | 'day'>('week')
+  const [calendarEvents, setCalendarEvents] = React.useState<CalendarEvent[]>([]);
+  const [isModalOpen, setIsModalOpen] = React.useState(false)
+  const [form, setForm] = React.useState({
+    title: '',
+    lecturer: '',
+    time: { start: '', end: '' },
+    room: '',
+    date: '',
+    status: 'scheduled',
+  })
 
+  React.useEffect(() => {
+    fetch('http://localhost:3001/api/events')
+      .then(res => res.json())
+      .then((data: CalendarEvent[]) => setCalendarEvents(data));
+  }, []);
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear()
     const month = date.getMonth()
@@ -91,10 +79,30 @@ export function CalendarPage() {
 
   const getEventsForDate = (date: Date) => {
     const dateString = date.toISOString().split('T')[0]
-    return calendarEvents.filter(event => event.date === dateString)
+    return calendarEvents.filter(event => event.date === dateString);
   }
 
   const days = getDaysInMonth(selectedDate)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await fetch('/api/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) throw new Error('Failed to add event');
+      setIsModalOpen(false);
+      setForm({ title: '', lecturer: '', time: { start: '', end: '' }, room: '', date: '', status: 'scheduled' });
+      // Refresh events
+      fetch('http://localhost:3001/api/events')
+        .then(res => res.json())
+        .then((data: CalendarEvent[]) => setCalendarEvents(data));
+    } catch (err) {
+      alert('Error adding event');
+    }
+  };
 
   return (
     <div className="flex-1 space-y-6 p-6">
@@ -131,13 +139,92 @@ export function CalendarPage() {
               Month
             </Button>
           </div>
-          <Button 
-            className="bg-[#2563eb] hover:bg-[#1d4ed8]"
-            onClick={() => alert('Add Event modal would open here')}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Add Event
-          </Button>
+          <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+            <DialogTrigger asChild>
+              <Button 
+                className="bg-[#2563eb] hover:bg-[#1d4ed8]"
+                onClick={() => setIsModalOpen(true)}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Event
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add Event</DialogTitle>
+              </DialogHeader>
+              <form className="space-y-4" onSubmit={handleSubmit}>
+                <div>
+                  <Label htmlFor="lecturer">Lecturer Name</Label>
+                  <Input
+                    id="lecturer"
+                    value={form.lecturer}
+                    onChange={e => setForm(f => ({ ...f, lecturer: e.target.value }))}
+                    placeholder="Enter lecturer name"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="time">Time</Label>
+                  <Input
+                    id="time-start"
+                    type="time"
+                    value={form.time.start}
+                    onChange={e => setForm(f => ({ ...f, time:{ ...f.time, start: e.target.value} }))}
+                  />
+                  <Input
+                    id="time-end"
+                    type="time"
+                    value={form.time.end}
+                    onChange={e => setForm(f => ({
+                      ...f,
+                      time: {
+                        ...f.time,
+                        end: e.target.value
+                      }
+                    }))}
+                    />
+                </div>
+                <div>
+                  <Label htmlFor="room">Room</Label>
+                  <Input
+                    id="room"
+                    value={form.room}
+                    onChange={e => setForm(f => ({ ...f, room: e.target.value }))}
+                    placeholder="Enter room"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="date">Date</Label>
+                  <Input
+                    id="date"
+                    type="date"
+                    value={form.date}
+                    onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="status">Status</Label>
+                  <select
+                    id="status"
+                    className="w-full border rounded px-2 py-1"
+                    value={form.status}
+                    onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+                  >
+                    <option value="scheduled">Scheduled</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                </div>
+                <DialogFooter>
+                  <DialogClose asChild>
+                    <Button type="button" variant="secondary">Cancel</Button>
+                  </DialogClose>
+                  <Button type="submit">
+                    Save
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
