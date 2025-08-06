@@ -1,12 +1,21 @@
 "use client"
 
 import * as React from "react"
-import { BarChart3, Calendar, ClipboardList, Home, MessageCircle, FileText, Users, Settings, ExternalLink, ArrowRight, Clock, UserCheck, AlertTriangle, TrendingUp } from 'lucide-react'
+import { BarChart3, Calendar, ClipboardList, Home, MessageCircle, FileText, Users, Settings, ExternalLink, ArrowRight, Clock, UserCheck, AlertTriangle, TrendingUp, QrCode } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import {
   Sidebar,
   SidebarContent,
@@ -103,6 +112,8 @@ function AppSidebar({ activePage, setActivePage }: { activePage: string, setActi
 
 export function SchoolAttendanceDashboard() {
   const [activePage, setActivePage] = React.useState("Dashboard")
+  const [isQRModalOpen, setIsQRModalOpen] = React.useState(false)
+  const [qrCodeData, setQrCodeData] = React.useState("")
 
   // Add event listener for cross-page navigation
   React.useEffect(() => {
@@ -113,6 +124,19 @@ export function SchoolAttendanceDashboard() {
     window.addEventListener('navigate', handleNavigate as EventListener)
     return () => window.removeEventListener('navigate', handleNavigate as EventListener)
   }, [])
+
+  const handleMarkAttendance = () => {
+    // Generate unique QR code data for this class session
+    const sessionData = {
+      class: "Mathematics 10A",
+      teacher: "Ms. Johnson",
+      date: new Date().toISOString(),
+      sessionId: Math.random().toString(36).substr(2, 9),
+      action: "mark_attendance"
+    }
+    setQrCodeData(JSON.stringify(sessionData))
+    setIsQRModalOpen(true)
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] to-[#e2e8f0]">
@@ -135,49 +159,105 @@ export function SchoolAttendanceDashboard() {
 
               <div className="grid gap-6 lg:grid-cols-3">
                 {/* Next Class */}
-                <Card className="lg:col-span-2 rounded-2xl border-0 bg-white shadow-lg">
-                  <CardHeader className="pb-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="text-xl font-bold text-gray-900">Next Class</CardTitle>
-                        <p className="text-sm text-gray-600">Period 3, 10:30 AM - 11:15 AM, Room 204</p>
-                      </div>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="text-[#2563eb] hover:bg-[#f1f5f9]"
-                        onClick={() => setActivePage('Calendar')}
-                      >
-                        View Schedule <ExternalLink className="ml-1 h-4 w-4" />
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div className="flex items-center space-x-3">
-                          <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-[#2563eb] to-[#1d4ed8] flex items-center justify-center">
-                            <span className="text-white font-bold text-lg">10A</span>
-                          </div>
+                <Dialog open={isQRModalOpen} onOpenChange={setIsQRModalOpen}>
+                  <DialogTrigger asChild>
+                    <Card className="lg:col-span-2 rounded-2xl border-0 bg-white shadow-lg cursor-pointer hover:shadow-xl transition-shadow duration-200">
+                      <CardHeader className="pb-4">
+                        <div className="flex items-center justify-between">
                           <div>
-                            <h3 className="font-semibold text-gray-900 text-lg">Mathematics</h3>
-                            <p className="text-sm text-gray-600">Grade 10 - Section A</p>
-                            <p className="text-sm text-gray-500">28 students enrolled</p>
+                            <CardTitle className="text-xl font-bold text-gray-900">Next Class</CardTitle>
+                            <p className="text-sm text-gray-600">Period 3, 10:30 AM - 11:15 AM, Room 204</p>
+                          </div>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="text-[#2563eb] hover:bg-[#f1f5f9]"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setActivePage('Calendar')
+                            }}
+                          >
+                            View Schedule <ExternalLink className="ml-1 h-4 w-4" />
+                          </Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-4">
+                            <div className="flex items-center space-x-3">
+                              <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-[#2563eb] to-[#1d4ed8] flex items-center justify-center">
+                                <span className="text-white font-bold text-lg">10A</span>
+                              </div>
+                              <div>
+                                <h3 className="font-semibold text-gray-900 text-lg">Mathematics</h3>
+                                <p className="text-sm text-gray-600">Grade 10 - Section A</p>
+                                <p className="text-sm text-gray-500">28 students enrolled</p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <Button 
+                              className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleMarkAttendance()
+                              }}
+                            >
+                              <QrCode className="mr-2 h-4 w-4" />
+                              Mark Attendance
+                            </Button>
+                            <p className="text-xs text-gray-500 mt-2">Last marked: Nov 8, 2024</p>
                           </div>
                         </div>
+                      </CardContent>
+                    </Card>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <QrCode className="h-5 w-5 text-[#2563eb]" />
+                        Scan QR Code for Attendance
+                      </DialogTitle>
+                      <DialogDescription>
+                        Students should scan this QR code with their mobile devices to mark their attendance for Mathematics 10A.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex flex-col items-center space-y-4 py-4">
+                      <div className="bg-white p-6 rounded-lg border-2 border-gray-200">
+                        <QRCodeSVG 
+                          value={qrCodeData} 
+                          size={200}
+                          level="M"
+                          includeMargin={true}
+                        />
                       </div>
-                      <div className="text-right">
+                      <div className="text-center space-y-2">
+                        <p className="text-sm font-medium text-gray-900">Mathematics 10A</p>
+                        <p className="text-xs text-gray-500">Session ID: {qrCodeData ? JSON.parse(qrCodeData).sessionId : ''}</p>
+                        <p className="text-xs text-gray-500">Valid until: {new Date(Date.now() + 15 * 60 * 1000).toLocaleTimeString()}</p>
+                      </div>
+                      <div className="flex gap-2 w-full">
                         <Button 
-                          className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white"
-                          onClick={() => setActivePage('Attendance Records')}
+                          variant="outline" 
+                          className="flex-1"
+                          onClick={() => setIsQRModalOpen(false)}
                         >
-                          Mark Attendance
+                          Close
                         </Button>
-                        <p className="text-xs text-gray-500 mt-2">Last marked: Nov 8, 2024</p>
+                        <Button 
+                          className="flex-1 bg-[#2563eb] hover:bg-[#1d4ed8]"
+                          onClick={() => {
+                            // Here you would typically send the attendance data to your backend
+                            console.log('Attendance session ended')
+                            setIsQRModalOpen(false)
+                          }}
+                        >
+                          End Session
+                        </Button>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
+                  </DialogContent>
+                </Dialog>
 
                 {/* Today's Attendance Summary */}
                 <Card className="rounded-2xl border-0 bg-white shadow-lg">
