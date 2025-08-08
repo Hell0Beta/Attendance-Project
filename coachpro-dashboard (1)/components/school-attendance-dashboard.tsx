@@ -14,7 +14,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import {
   Sidebar,
@@ -86,14 +85,13 @@ function AppSidebar({ activePage, setActivePage }: { activePage: string, setActi
                   <SidebarMenuButton
                     asChild
                     isActive={activePage === item.label}
-                    className={`w-full justify-start rounded-xl px-4 py-3 text-sm font-medium transition-all ${
-                      activePage === item.label
+                    className={`w-full justify-start rounded-xl px-4 py-3 text-sm font-medium transition-all ${activePage === item.label
                         ? "bg-[#2563eb] text-white shadow-lg"
                         : "text-gray-600 hover:bg-[#f1f5f9] hover:text-[#2563eb]"
-                    }`}
+                      }`}
                   >
-                    <button 
-                      onClick={() => setActivePage(item.label)} 
+                    <button
+                      onClick={() => setActivePage(item.label)}
                       className="flex items-center gap-3 w-full text-left"
                     >
                       <item.icon className="h-5 w-5" />
@@ -108,6 +106,216 @@ function AppSidebar({ activePage, setActivePage }: { activePage: string, setActi
       </SidebarContent>
     </Sidebar>
   )
+}
+
+/**
+ * ISSUE EXPLANATION:
+ * The modal (Dialog) for scanning QR codes was not opening as expected when clicking the "Mark Attendance" button or the card background because:
+ * - The DialogTrigger component expects a single child and only opens the modal if that child is directly clicked.
+ * - If you call setIsQRModalOpen from a button inside the child, it does not open the modal unless the DialogTrigger is clicked.
+ * - This causes confusion and inconsistent modal opening behavior.
+ * 
+ * SOLUTION:
+ * - Remove DialogTrigger entirely.
+ * - Control the Dialog's open state directly via a boolean (isQRModalOpen) and setIsQRModalOpen.
+ * - Pass setIsQRModalOpen and handleMarkAttendance to NextClassCard.
+ * - When the card or the Mark Attendance button is clicked, call setIsQRModalOpen(true) (after any logic).
+ * - This ensures the modal opens reliably from both the card and the button.
+ */
+
+function NextClassCard({
+  setActivePage,
+  onOpenQRModal,
+}: {
+  setActivePage: (page: string) => void,
+  onOpenQRModal: () => void,
+}) {
+  const [nextClass, setNextClass] = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    async function fetchEvents() {
+      setLoading(true);
+      try {
+        const res = await fetch('/api/events');
+        const events = await res.json();
+
+        // Get today's date in YYYY-MM-DD
+        const now = new Date();
+        const todayStr = now.toISOString().slice(0, 10);
+
+        // Filter for today's classes only
+        const todaysClasses = events.filter(
+          (e: any) =>
+            e.type === "class" &&
+            e.date === todayStr
+        );
+
+        // Parse event start/end times and find the next class
+        const nowMinutes =
+          now.getHours() * 60 + now.getMinutes();
+
+        // Helper to parse "10:30 AM - 11:15 AM"
+        function parseTimeRange(timeRange: string) {
+          const [start, end] = timeRange.split(" - ");
+          function toMinutes(t: string) {
+            const [time, ampm] = t.split(" ");
+            let [h, m] = time.split(":").map(Number);
+            if (ampm === "PM" && h !== 12) h += 12;
+            if (ampm === "AM" && h === 12) h = 0;
+            return h * 60 + m;
+          }
+          return {
+            start: toMinutes(start),
+            end: toMinutes(end),
+          };
+        }
+
+        // Find the next class (start time >= now)
+        const upcoming = todaysClasses
+          .map((e: any) => ({
+            ...e,
+            ...parseTimeRange(e.time),
+          }))
+          .filter((e: any) => e.end >= nowMinutes)
+          .sort((a: any, b: any) => a.start - b.start);
+
+        setNextClass(upcoming.length > 0 ? upcoming[0] : null);
+      } catch (err) {
+        setNextClass(null);
+      }
+      setLoading(false);
+    }
+    fetchEvents();
+  }, []);
+
+  if (loading) {
+    return (
+      <Card className="lg:col-span-2 rounded-2xl border-0 bg-white shadow-lg flex items-center justify-center min-h-[180px]">
+        <span className="text-gray-500">Loading next class...</span>
+      </Card>
+    );
+  }
+
+  if (!nextClass) {
+    return (
+      <Card className="lg:col-span-2 rounded-2xl border-0 bg-white shadow-lg flex items-center justify-center min-h-[180px]">
+        <span className="text-gray-500">No more classes scheduled for today.</span>
+      </Card>
+    );
+  }
+
+  // Determine if attendance can be marked (current time within class time)
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const canMarkAttendance = nowMinutes >= nextClass.start && nowMinutes <= nextClass.end;
+
+  // Card click handler: always open modal (regardless of canMarkAttendance)
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Prevent opening if clicking the Mark Attendance button or its children
+    if (
+      (e.target as HTMLElement).closest("button[data-mark-attendance]")
+    ) {
+      return;
+    }
+    onOpenQRModal();
+  };
+
+  // Mark Attendance button click handler: always open modal (regardless of canMarkAttendance)
+  const handleMarkAttendanceClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onOpenQRModal();
+  };
+
+  return (
+    <Card
+      className={`lg:col-span-2 rounded-2xl border-0 bg-white shadow-lg cursor-pointer hover:shadow-xl transition-shadow duration-200`}
+      onClick={handleCardClick}
+      tabIndex={0}
+      role="button"
+      aria-disabled={false}
+      style={{ outline: "none" }}
+    >
+      <CardHeader className="pb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-xl font-bold text-gray-900">Next Class</CardTitle>
+            <p className="text-sm text-gray-600">
+              {nextClass.title}, {nextClass.time}, {nextClass.room}
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-[#2563eb] hover:bg-[#f1f5f9]"
+            onClick={(e) => {
+              e.stopPropagation()
+              setActivePage('Calendar')
+            }}
+          >
+            View Schedule <ExternalLink className="ml-1 h-4 w-4" />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3">
+              <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-[#2563eb] to-[#1d4ed8] flex items-center justify-center">
+                <span className="text-white font-bold text-lg">
+                  {nextClass.title.match(/\d+[A-Z]/) ? nextClass.title.match(/\d+[A-Z]/)[0] : "Class"}
+                </span>
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 text-lg">
+                  {nextClass.title.replace(/\d+[A-Z]/, '').trim()}
+                </h3>
+                <p className="text-sm text-gray-600">
+                  {nextClass.title.match(/\d+/) ? `Grade ${nextClass.title.match(/\d+/)[0]}` : ""}
+                  {nextClass.title.match(/[A-Z]$/) ? ` - Section ${nextClass.title.match(/[A-Z]$/)[0]}` : ""}
+                </p>
+                <p className="text-sm text-gray-500">
+                  {nextClass.students != null ? `${nextClass.students} students enrolled` : ""}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="text-right">
+            <Button
+              className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white"
+              data-mark-attendance
+              onClick={handleMarkAttendanceClick}
+              // No longer disabling the button
+            >
+              <QrCode className="mr-2 h-4 w-4" />
+              Mark Attendance
+            </Button>
+            <p className="text-xs text-gray-500 mt-2">
+              {/* This could be dynamic if you track last attendance */}
+              Last marked: Nov 8, 2024
+            </p>
+            {(() => {
+              if (nowMinutes < nextClass.start) {
+                return (
+                  <p className="text-xs text-yellow-600 mt-1">
+                    Attendance can be marked from {nextClass.time.split(" - ")[0]}
+                  </p>
+                );
+              }
+              if (nowMinutes > nextClass.end) {
+                return (
+                  <p className="text-xs text-red-500 mt-1">
+                    This class session has ended.
+                  </p>
+                );
+              }
+              return null;
+            })()}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 export function SchoolAttendanceDashboard() {
@@ -125,17 +333,10 @@ export function SchoolAttendanceDashboard() {
     return () => window.removeEventListener('navigate', handleNavigate as EventListener)
   }, [])
 
-  const handleMarkAttendance = () => {
-    // const response = await fetch('http://localhost:5000/api/session-data') // Your other local server
-    // const sessionData = await response.json()
+  // This function is called when the card or Mark Attendance button is clicked
+  const handleOpenQRModal = () => {
     // Generate unique QR code data for this class session
-    const sessionData = {
-      class: "Mathematics 10A",
-      teacher: "Ms. Johnson",
-      date: new Date().toISOString(),
-      sessionId: "FCM.41.008.062.23\n",
-      action: "mark_attendance"
-    }
+    const sessionData = "https://docs.google.com/forms/d/e/1FAIpQLSdEzTyTJ1849Z4nBSTZCnF1YF4NeQpM1EsMhSCvdzN120UnVQ/viewform?usp=dialog"
     setQrCodeData(JSON.stringify(sessionData))
     setIsQRModalOpen(true)
   }
@@ -162,58 +363,6 @@ export function SchoolAttendanceDashboard() {
               <div className="grid gap-6 lg:grid-cols-3">
                 {/* Next Class */}
                 <Dialog open={isQRModalOpen} onOpenChange={setIsQRModalOpen}>
-                  <DialogTrigger asChild>
-                    <Card className="lg:col-span-2 rounded-2xl border-0 bg-white shadow-lg cursor-pointer hover:shadow-xl transition-shadow duration-200">
-                      <CardHeader className="pb-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <CardTitle className="text-xl font-bold text-gray-900">Next Class</CardTitle>
-                            <p className="text-sm text-gray-600">Period 3, 10:30 AM - 11:15 AM, Room 204</p>
-                          </div>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="text-[#2563eb] hover:bg-[#f1f5f9]"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setActivePage('Calendar')
-                            }}
-                          >
-                            View Schedule <ExternalLink className="ml-1 h-4 w-4" />
-                          </Button>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-4">
-                            <div className="flex items-center space-x-3">
-                              <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-[#2563eb] to-[#1d4ed8] flex items-center justify-center">
-                                <span className="text-white font-bold text-lg">10A</span>
-                              </div>
-                              <div>
-                                <h3 className="font-semibold text-gray-900 text-lg">Mathematics</h3>
-                                <p className="text-sm text-gray-600">Grade 10 - Section A</p>
-                                <p className="text-sm text-gray-500">28 students enrolled</p>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <Button 
-                              className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleMarkAttendance()
-                              }}
-                            >
-                              <QrCode className="mr-2 h-4 w-4" />
-                              Mark Attendance
-                            </Button>
-                            <p className="text-xs text-gray-500 mt-2">Last marked: Nov 8, 2024</p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </DialogTrigger>
                   <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                       <DialogTitle className="flex items-center gap-2">
@@ -226,8 +375,8 @@ export function SchoolAttendanceDashboard() {
                     </DialogHeader>
                     <div className="flex flex-col items-center space-y-4 py-4">
                       <div className="bg-white p-6 rounded-lg border-2 border-gray-200">
-                        <QRCodeSVG 
-                          value={qrCodeData} 
+                        <QRCodeSVG
+                          value={qrCodeData}
                           size={200}
                           level="M"
                           includeMargin={true}
@@ -239,14 +388,14 @@ export function SchoolAttendanceDashboard() {
                         <p className="text-xs text-gray-500">Valid until: {new Date(Date.now() + 15 * 60 * 1000).toLocaleTimeString()}</p>
                       </div>
                       <div className="flex gap-2 w-full">
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           className="flex-1"
                           onClick={() => setIsQRModalOpen(false)}
                         >
                           Close
                         </Button>
-                        <Button 
+                        <Button
                           className="flex-1 bg-[#2563eb] hover:bg-[#1d4ed8]"
                           onClick={() => {
                             // Here you would typically send the attendance data to your backend
@@ -259,6 +408,8 @@ export function SchoolAttendanceDashboard() {
                       </div>
                     </div>
                   </DialogContent>
+                  {/* NextClassCard is outside DialogTrigger, and controls modal open state directly */}
+                  <NextClassCard setActivePage={setActivePage} onOpenQRModal={handleOpenQRModal} />
                 </Dialog>
 
                 {/* Today's Attendance Summary */}
@@ -266,9 +417,9 @@ export function SchoolAttendanceDashboard() {
                   <CardHeader className="pb-4">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-xl font-bold text-gray-900">Today's Summary</CardTitle>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         className="text-[#2563eb] hover:bg-[#f1f5f9]"
                         onClick={() => setActivePage('Students')}
                       >
@@ -312,9 +463,9 @@ export function SchoolAttendanceDashboard() {
                   <CardHeader className="pb-4">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-xl font-bold text-gray-900">Class Attendance Performance</CardTitle>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         className="text-[#2563eb] hover:bg-[#f1f5f9]"
                         onClick={() => setActivePage('My Classes')}
                       >
@@ -338,9 +489,8 @@ export function SchoolAttendanceDashboard() {
                           <TableRow key={classData.position} className="border-gray-100">
                             <TableCell className="font-medium">
                               <div className="flex items-center space-x-3">
-                                <span className={`flex h-6 w-6 items-center justify-center rounded text-xs font-bold ${
-                                  classData.position === 1 ? 'bg-[#2563eb] text-white' : 'bg-gray-100 text-gray-600'
-                                }`}>
+                                <span className={`flex h-6 w-6 items-center justify-center rounded text-xs font-bold ${classData.position === 1 ? 'bg-[#2563eb] text-white' : 'bg-gray-100 text-gray-600'
+                                  }`}>
                                   {classData.position}
                                 </span>
                                 <span className="text-gray-900">{classData.name}</span>
@@ -350,12 +500,11 @@ export function SchoolAttendanceDashboard() {
                             <TableCell className="text-center text-gray-600">{classData.present}</TableCell>
                             <TableCell className="text-center font-semibold text-gray-900">{classData.rate}%</TableCell>
                             <TableCell className="text-center">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                classData.status === 'excellent' ? 'bg-green-100 text-green-800' :
-                                classData.status === 'good' ? 'bg-blue-100 text-blue-800' :
-                                classData.status === 'average' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-red-100 text-red-800'
-                              }`}>
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${classData.status === 'excellent' ? 'bg-green-100 text-green-800' :
+                                  classData.status === 'good' ? 'bg-blue-100 text-blue-800' :
+                                    classData.status === 'average' ? 'bg-yellow-100 text-yellow-800' :
+                                      'bg-red-100 text-red-800'
+                                }`}>
                                 {classData.status}
                               </span>
                             </TableCell>
@@ -375,10 +524,9 @@ export function SchoolAttendanceDashboard() {
                           <div>
                             <p className="text-sm text-gray-600">{metric.title}</p>
                             <p className="text-2xl font-bold text-gray-900">{metric.value}</p>
-                            <p className={`text-xs ${
-                              metric.trend.startsWith('+') ? 'text-green-600' : 
-                              metric.trend.startsWith('-') ? 'text-red-600' : 'text-gray-500'
-                            }`}>
+                            <p className={`text-xs ${metric.trend.startsWith('+') ? 'text-green-600' :
+                                metric.trend.startsWith('-') ? 'text-red-600' : 'text-gray-500'
+                              }`}>
                               {metric.trend !== "0" && `${metric.trend} from last week`}
                             </p>
                           </div>
@@ -406,7 +554,7 @@ export function SchoolAttendanceDashboard() {
                         <div className="h-6 w-6 rounded-full bg-white/30"></div>
                         <div className="h-4 w-4 rounded-full bg-white/40"></div>
                       </div>
-                      <Button 
+                      <Button
                         className="bg-white text-[#2563eb] hover:bg-white/90"
                         onClick={() => setActivePage('Students')}
                       >

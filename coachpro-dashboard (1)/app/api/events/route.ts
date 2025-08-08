@@ -47,12 +47,12 @@ export async function GET(request: NextRequest) {
     {
       id: 5,
       title: "Mathematics 9A",
-      time: "9:00 AM - 9:45 AM",
+      time: "9:00 PM - 9:45 PM",
       room: "Room 203",
       students: 32,
       type: "class",
       status: "completed",
-      date: "2024-11-08"
+      date: "2025-08-06"
     }
   ];
   return NextResponse.json(data);
